@@ -90,7 +90,10 @@ function toast(msg) {
 /* =========================================================
    Stato / persistenza
    ========================================================= */
-let S = load();
+// Modalità: locale (solo questo browser) o condivisa (database Supabase, vedi cloud.js e config.js)
+const CFG = window.AGENDA_CONFIG || {};
+const CLOUD = !!(CFG.supabaseUrl && CFG.supabaseAnonKey);
+let S = CLOUD ? emptyState() : load();
 
 function load() {
   try {
@@ -100,6 +103,7 @@ function load() {
   return seed();
 }
 function save() {
+  if (CLOUD) return cloudSave();
   try { localStorage.setItem(DB_KEY, JSON.stringify(S)); } catch (e) { toast('⚠️ Impossibile salvare nel browser'); }
 }
 function normalize(d) {
@@ -953,25 +957,29 @@ function renderImpostazioni(el) {
       </div>
       <div class="card">
         <div class="card-head"><h3>💾 Dati e backup</h3></div>
-        <p class="small muted">I dati sono salvati solo in questo browser. Esporta regolarmente un backup, o usalo per spostare l'agenda su un altro dispositivo.</p>
+        <p class="small muted">${CLOUD
+          ? 'I dati sono nel database condiviso e si aggiornano in tempo reale per tutto lo staff. Il backup JSON resta utile come copia di sicurezza.'
+          : 'Modalità locale: i dati sono salvati solo in questo browser. Per condividerli con lo staff configura il database (vedi README). Esporta regolarmente un backup.'}</p>
         <div class="toolbar">
           <button class="btn" id="exp">⬇ Esporta backup (JSON)</button>
-          <label class="btn">⬆ Importa backup<input type="file" id="imp" accept="application/json" hidden></label>
+          ${CLOUD && me?.ruolo !== 'admin' ? '' : '<label class="btn">⬆ Importa backup<input type="file" id="imp" accept="application/json" hidden></label>'}
           <button class="btn" id="csvAll">⬇ Prenotazioni CSV</button>
         </div>
-        <div class="toolbar">
+        ${CLOUD && me?.ruolo !== 'admin' ? '' : `<div class="toolbar">
           <button class="btn danger" id="reset">Ricarica dati demo</button>
           <button class="btn danger" id="wipe">Svuota tutto</button>
-        </div>
+        </div>`}
         <p class="small muted">${S.prenotazioni.length} prenotazioni · ${S.piatti.length} piatti · ${S.menu.length} menu · ${S.servizi.length} servizi · ${S.sale.length} sale</p>
       </div>
-    </div>`;
+    </div>
+    ${CLOUD ? '<div class="grid cols-2" style="margin-top:16px" id="cloudCards"></div>' : ''}`;
+  if (CLOUD) renderCloudSettings($('#cloudCards', el));
   $$('[data-set]', el).forEach(i => i.onchange = () => {
     st[i.dataset.set] = i.type === 'number' ? num(i.value) : i.value; save(); $('#brandName').textContent = st.nome; toast('Salvato');
   });
   $('#exp').onclick = () => download(`agenda-ristorante-${todayISO()}.json`, JSON.stringify(S, null, 2), 'application/json');
   $('#csvAll').onclick = () => exportCSV(S.prenotazioni);
-  $('#imp').onchange = e => {
+  if ($('#imp')) $('#imp').onchange = e => {
     const f = e.target.files[0]; if (!f) return;
     const r = new FileReader();
     r.onload = () => {
@@ -984,8 +992,8 @@ function renderImpostazioni(el) {
     };
     r.readAsText(f);
   };
-  $('#reset').onclick = () => { if (confirm('Sostituire tutti i dati con i dati demo?')) { S = seed(); rerender(); } };
-  $('#wipe').onclick = () => {
+  if ($('#reset')) $('#reset').onclick = () => { if (confirm('Sostituire tutti i dati con i dati demo?')) { S = seed(); rerender(); } };
+  if ($('#wipe')) $('#wipe').onclick = () => {
     if (!confirm('Cancellare TUTTI i dati (prenotazioni, menu, servizi)? Le sale e i turni restano.')) return;
     const keep = { settings: S.settings, sale: S.sale };
     S = { ...emptyState(), ...keep }; rerender();
@@ -1342,7 +1350,10 @@ function openModal(title, html) {
   $$('[data-close]', $('#modalBody')).forEach(b => (b.onclick = closeModal));
   $('#modal').scrollTop = 0;
 }
-function closeModal() { $('#modal').hidden = true; $('#modalBody').innerHTML = ''; document.body.style.overflow = ''; }
+function closeModal() {
+  $('#modal').hidden = true; $('#modalBody').innerHTML = ''; document.body.style.overflow = '';
+  if (typeof onModalClosed === 'function') onModalClosed();
+}
 
 function download(name, content, type) {
   const a = document.createElement('a');
@@ -1374,5 +1385,4 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#modal
 $('#btnNew').onclick = $('#btnNewSide').onclick = () => openBooking(null, {});
 $('#btnNewEvent').onclick = () => openBooking(null, { tipo: 'evento' });
 window.addEventListener('hashchange', route);
-save();
-route();
+// avvio: boot() è definita in cloud.js (gestisce sia la modalità locale sia quella condivisa)

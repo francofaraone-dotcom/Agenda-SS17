@@ -2,7 +2,10 @@
 
 Web app per gestire **prenotazioni, eventi e disponibilità** di un ristorante, con composizione dei menu, intolleranze, servizi aggiuntivi, formula di servizio (servito / buffet) e intrattenimento (musica, DJ, karaoke…).
 
-Nessuna installazione: è una pagina statica (HTML + CSS + JavaScript). I dati sono salvati nel browser (localStorage).
+Nessuna installazione: è una pagina statica (HTML + CSS + JavaScript). Funziona in due modalità:
+
+- **locale**: i dati restano nel browser del dispositivo (nessuna configurazione);
+- **condivisa**: i dati stanno in un database online con login riservato allo staff e aggiornamenti in tempo reale (vedi sotto).
 
 ## Avvio
 
@@ -38,4 +41,66 @@ Al primo avvio vengono caricati dei dati demo (ricaricabili o cancellabili da *I
 - **Preventivo automatico**: menu adulti e bambini, servizi, intrattenimento, sconto, caparra e saldo
 - Scheda stampabile, testo di conferma da copiare o inviare via WhatsApp, duplicazione
 
-> I dati restano nel browser del dispositivo in uso: per condividerli tra più dispositivi usa *Esporta / Importa backup*.
+## Database condiviso e accesso riservato allo staff
+
+Con il database condiviso tutto lo staff vede la stessa agenda, da qualsiasi dispositivo, e le modifiche compaiono **in tempo reale** sugli altri schermi. Per entrare serve **email e password**, e possono entrare **solo le email autorizzate** dall'amministratore.
+
+Il database è [Supabase](https://supabase.com) (piano gratuito sufficiente per un ristorante).
+
+### 1. Crea il database (una volta, ~5 minuti)
+
+1. Registrati su supabase.com → **New project** (scegli una regione europea, es. Frankfurt, e una password per il database).
+2. Apri **SQL Editor → New query**, incolla tutto il file [`supabase/schema.sql`](supabase/schema.sql), **sostituisci in fondo `TUA-EMAIL@esempio.it` con la tua email** e premi **Run**.
+3. In **Project Settings → API** copia *Project URL* e la chiave *anon public*.
+4. In **Authentication → URL Configuration** imposta *Site URL* con l'indirizzo della pagina (vedi punto 3 sotto, es. `https://<utente>.github.io/Agenda-SS17/`), così i link di conferma e di reset password tornano all'agenda.
+
+### 2. Collega l'app
+
+Modifica [`config.js`](config.js) (anche direttamente dal sito di GitHub, icona ✏️) e incolla i due valori:
+
+```js
+window.AGENDA_CONFIG = {
+  supabaseUrl: 'https://xxxxxxxx.supabase.co',
+  supabaseAnonKey: 'eyJhbGciOi...',
+};
+```
+
+La chiave *anon public* è fatta per stare nella pagina: da sola non dà accesso a nulla, perché le regole di sicurezza del database (Row Level Security) permettono di leggere e scrivere **solo agli utenti loggati presenti nella tabella `staff`**. Non inserire mai la chiave *service_role*.
+
+### 3. Pubblica su GitHub Pages
+
+1. Unisci il codice nel branch `main`.
+2. Su GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+3. Il workflow `.github/workflows/pages.yml` pubblica la pagina a ogni modifica di `main` (pubblica solo i file dell'app, non lo schema SQL). L'indirizzo compare in **Actions** e in **Settings → Pages**.
+
+> **Nota sulla privacy della pagina.** GitHub Pages non può chiedere una password (questo è possibile solo con GitHub Enterprise Cloud). Inoltre, con il piano GitHub *Free* Pages funziona solo su repository **pubblici**; con *Pro/Team* anche da repository privati, ma il sito resta comunque raggiungibile da chiunque abbia il link.
+> Non è un problema: la pagina contiene solo il programma, **nessun dato e nessun segreto**. Chi apre il link senza essere autorizzato vede soltanto la schermata di accesso, e il database rifiuta qualsiasi richiesta che non venga da un membro dello staff.
+
+### 4. Primo accesso e staff
+
+1. Apri la pagina → **Primo accesso? Crea l'account** con la tua email (quella messa nello schema) → conferma dal link ricevuto via email → accedi.
+2. Al primo accesso con database vuoto puoi scegliere: caricare i dati già presenti nel browser, i dati demo, oppure partire da zero.
+3. Per aggiungere collaboratori: **Impostazioni → Staff autorizzato** → inserisci email, nome e ruolo (*Staff* o *Amministratore*). La persona apre la pagina e crea il proprio account con quella email.
+4. Per togliere l'accesso: **Rimuovi** accanto al nome. Da quel momento il database non le mostra più nulla.
+
+Ruoli: lo **staff** gestisce prenotazioni, eventi, menu, servizi e disponibilità; l'**amministratore** in più gestisce le persone autorizzate, importa backup e può svuotare i dati.
+
+Consiglio: quando tutto lo staff ha creato l'account, in Supabase **Authentication → Providers → Email** puoi disattivare *Allow new users to sign up*; i nuovi collaboratori li inviterai da **Authentication → Users → Invite user** (oltre ad autorizzarli nell'app).
+
+### Come funziona la sincronizzazione
+
+- Ogni prenotazione, piatto, menu, servizio, sala e chiusura è un documento separato: si salva solo ciò che cambia, quindi due persone possono lavorare contemporaneamente su prenotazioni diverse senza sovrascriversi. Se modificano **la stessa** prenotazione nello stesso momento vale l'ultimo salvataggio.
+- In alto accanto al titolo c'è lo stato: **● Sincronizzato**, **Salvataggio…**, **⚠ Non salvato** (riprova in automatico).
+- Se un collega modifica qualcosa mentre stai compilando un modulo, la vista si aggiorna appena chiudi il modulo.
+- Lasciando `config.js` vuoto l'app torna in modalità locale (dati solo nel browser).
+
+## File
+
+| File | Contenuto |
+|---|---|
+| `index.html`, `styles.css` | Struttura e grafica |
+| `app.js` | Logica dell'agenda |
+| `cloud.js` | Login, database condiviso, tempo reale, gestione staff |
+| `config.js` | Collegamento al database (vuoto = modalità locale) |
+| `supabase/schema.sql` | Tabelle e regole di sicurezza da eseguire su Supabase |
+| `.github/workflows/pages.yml` | Pubblicazione automatica su GitHub Pages |
