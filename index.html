@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agenda Ristorante</title>
+  <meta name="description" content="Agenda per ristorante: prenotazioni, eventi, disponibilità, menu, intolleranze e servizi aggiuntivi.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar no-print">
+      <div class="brand">
+        <span class="brand-logo">🍽️</span>
+        <div>
+          <div class="brand-name" id="brandName">Agenda Ristorante</div>
+          <div class="brand-sub">Prenotazioni &amp; Eventi</div>
+        </div>
+      </div>
+      <nav class="nav" id="nav">
+        <a href="#oggi" data-view="oggi"><span>🏠</span><b>Oggi</b></a>
+        <a href="#calendario" data-view="calendario"><span>📅</span><b>Calendario</b></a>
+        <a href="#prenotazioni" data-view="prenotazioni"><span>📝</span><b>Prenotazioni</b></a>
+        <a href="#eventi" data-view="eventi"><span>🎉</span><b>Eventi</b></a>
+        <a href="#disponibilita" data-view="disponibilita"><span>🪑</span><b>Disponibilità</b></a>
+        <a href="#menu" data-view="menu"><span>📖</span><b>Menu</b></a>
+        <a href="#servizi" data-view="servizi"><span>✨</span><b>Servizi</b></a>
+        <a href="#impostazioni" data-view="impostazioni"><span>⚙️</span><b>Impostazioni</b></a>
+      </nav>
+      <button class="btn primary full" id="btnNewSide">+ Nuova prenotazione</button>
+    </aside>
+
+    <main class="main">
+      <header class="topbar no-print">
+        <h1 id="viewTitle">Oggi</h1>
+        <div class="topbar-actions">
+          <button class="btn" id="btnNewEvent">+ Evento</button>
+          <button class="btn primary" id="btnNew">+ Prenotazione</button>
+        </div>
+      </header>
+      <section id="view" class="view"></section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h2 id="modalTitle"></h2>
+        <button class="icon-btn no-print" id="modalClose" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
