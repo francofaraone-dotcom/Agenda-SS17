@@ -24,7 +24,7 @@ jobs:
       - name: Prepara i file del sito
         run: |
           mkdir _site
-          cp index.html styles.css app.js cloud.js config.js _site/
+          cp index.html styles.css app.js gcal.js cloud.js config.js _site/
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

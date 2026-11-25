@@ -93,14 +93,35 @@ function toast(msg) {
 // Modalità: locale (solo questo browser) o condivisa (database Supabase, vedi cloud.js e config.js)
 const CFG = window.AGENDA_CONFIG || {};
 const CLOUD = !!(CFG.supabaseUrl && CFG.supabaseAnonKey);
+// Rimuove una sola volta i dati di esempio caricati dalle versioni precedenti.
+// Se nel frattempo sono state inserite prenotazioni vere, toglie solo quelle demo.
+const DEMO_CLEANUP_KEY = 'agendaRistorante.demoCleanup';
+const DEMO_NOMI = ['Rossi Mario', 'Bianchi Laura', 'Verdi Paolo', 'Esposito Anna', 'Neri Giulia', 'Ferrari Stefano', 'Acme Srl — Sig.ra Conti'];
 let S = CLOUD ? emptyState() : load();
 
 function load() {
   try {
     const raw = localStorage.getItem(DB_KEY);
-    if (raw) return normalize(JSON.parse(raw));
+    if (raw) return stripDemo(normalize(JSON.parse(raw)));
   } catch (e) { /* storage non disponibile */ }
-  return seed();
+  try { localStorage.setItem(DEMO_CLEANUP_KEY, '1'); } catch { /* niente */ }
+  return cleanStart();
+}
+// agenda vuota pronta all'uso: una sala e i turni standard
+function cleanStart() {
+  const s = emptyState();
+  s.sale = [{ id: uid(), nome: 'Sala principale', capienza: 50, tavoli: 12, note: 'Modifica capienza e sale in Disponibilità' }];
+  return s;
+}
+function stripDemo(d) {
+  try {
+    if (localStorage.getItem(DEMO_CLEANUP_KEY)) return d;
+    localStorage.setItem(DEMO_CLEANUP_KEY, '1');
+  } catch { return d; }
+  if (d.settings?.nome !== 'Trattoria Demo') return d;
+  const vere = d.prenotazioni.filter(p => !DEMO_NOMI.includes(p.nome));
+  if (!vere.length) return cleanStart();
+  return { ...d, prenotazioni: vere };
 }
 function save() {
   if (CLOUD) return cloudSave();
@@ -576,6 +597,7 @@ function filtersBar(withTipo = true) {
     <label class="small muted">al <input type="date" id="fAl" value="${esc(f.al)}" style="width:auto"></label>
     <button class="btn sm ghost" id="fReset">Azzera</button>
     <span class="spacer"></span>
+    <button class="btn sm" id="fGcal">📥 Importa da Google Calendar</button>
     <button class="btn sm" id="fCsv">⬇ CSV</button>
   </div>`;
 }
@@ -589,6 +611,7 @@ function bindFilters(el, list) {
   let deb; $('#fQ').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(upd, 250); });
   $('#fReset').onclick = () => { UI.filtri = { q: '', stato: '', tipo: '', dal: '', al: '' }; route(); };
   $('#fCsv').onclick = () => exportCSV(list);
+  $('#fGcal').onclick = () => openGcalImport();
 }
 
 function renderPrenotazioni(el) {
@@ -972,7 +995,12 @@ function renderImpostazioni(el) {
         <p class="small muted">${S.prenotazioni.length} prenotazioni · ${S.piatti.length} piatti · ${S.menu.length} menu · ${S.servizi.length} servizi · ${S.sale.length} sale</p>
       </div>
     </div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-head"><h3>📥 Google Calendar</h3><button class="btn sm primary" id="gcalImp">Importa prenotazioni</button></div>
+      <p class="small muted" style="margin:0">Importa gli eventi del calendario Google che usavate per le prenotazioni (file .ics o .zip esportato da Google). Gli eventi già importati vengono riconosciuti e non si duplicano.</p>
+    </div>
     ${CLOUD ? '<div class="grid cols-2" style="margin-top:16px" id="cloudCards"></div>' : ''}`;
+  $('#gcalImp').onclick = () => openGcalImport();
   if (CLOUD) renderCloudSettings($('#cloudCards', el));
   $$('[data-set]', el).forEach(i => i.onchange = () => {
     st[i.dataset.set] = i.type === 'number' ? num(i.value) : i.value; save(); $('#brandName').textContent = st.nome; toast('Salvato');
@@ -994,9 +1022,9 @@ function renderImpostazioni(el) {
   };
   if ($('#reset')) $('#reset').onclick = () => { if (confirm('Sostituire tutti i dati con i dati demo?')) { S = seed(); rerender(); } };
   if ($('#wipe')) $('#wipe').onclick = () => {
-    if (!confirm('Cancellare TUTTI i dati (prenotazioni, menu, servizi)? Le sale e i turni restano.')) return;
+    if (!confirm('Cancellare TUTTI i dati (prenotazioni, piatti, menu, servizi, chiusure)? Le sale e i turni restano.')) return;
     const keep = { settings: S.settings, sale: S.sale };
-    S = { ...emptyState(), ...keep }; rerender();
+    S = S.settings.nome === 'Trattoria Demo' ? cleanStart() : { ...emptyState(), ...keep }; rerender();
   };
 }
 

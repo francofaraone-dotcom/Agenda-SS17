@@ -13,7 +13,7 @@ Nessuna installazione: è una pagina statica (HTML + CSS + JavaScript). Funziona
 - pubblicala con GitHub Pages (Settings → Pages → branch e cartella root), **oppure**
 - in locale: `python3 -m http.server` e vai su http://localhost:8000
 
-Al primo avvio vengono caricati dei dati demo (ricaricabili o cancellabili da *Impostazioni*).
+Al primo avvio l'agenda è vuota, con una sala e i turni standard: imposta sale, turni, piatti, menu e servizi dalle rispettive sezioni (i dati demo si possono caricare da *Impostazioni* per fare prove).
 
 ## Funzioni
 
@@ -40,6 +40,16 @@ Al primo avvio vengono caricati dei dati demo (ricaricabili o cancellabili da *I
 - **Servizi aggiuntivi** dal catalogo
 - **Preventivo automatico**: menu adulti e bambini, servizi, intrattenimento, sconto, caparra e saldo
 - Scheda stampabile, testo di conferma da copiare o inviare via WhatsApp, duplicazione
+
+## Importare le prenotazioni da Google Calendar
+
+1. Su computer apri **calendar.google.com → ⚙️ Impostazioni**, scegli a sinistra il calendario delle prenotazioni e clicca **Esporta calendario** (scarica un file `.zip`).
+2. Nell'agenda: **Prenotazioni → 📥 Importa da Google Calendar** (oppure da *Impostazioni*) e carica lo `.zip` così com'è, o il file `.ics` estratto.
+3. Scegli da quale data importare (di default da oggi), controlla l'anteprima e premi **Importa selezionati**.
+
+Dal titolo e dalla descrizione di ogni evento l'app ricava: nome, coperti (*"Rossi 4 pax"*, *"x6"*, *"8 persone"*, *"(5)"*), bambini, telefono, email, tavolo, tipo di evento (compleanno, comunione, matrimonio, aziendale…), intolleranze (*celiaco, vegano, allergia noci…*) e stato (*da confermare*, eventi annullati). Nell'anteprima si può correggere tutto; il testo originale finisce nelle note. Gli eventi già importati vengono riconosciuti e non si duplicano, quindi si può ripetere l'importazione quando serve.
+
+Limiti: degli eventi ricorrenti viene importata solo la prima data; gli eventi "tutto il giorno" ricevono l'orario di inizio dell'ultimo turno (modificabile).
 
 ## Database condiviso e accesso riservato allo staff
 
@@ -100,6 +110,7 @@ Consiglio: quando tutto lo staff ha creato l'account, in Supabase **Authenticati
 |---|---|
 | `index.html`, `styles.css` | Struttura e grafica |
 | `app.js` | Logica dell'agenda |
+| `gcal.js` | Importazione da Google Calendar (.ics / .zip) |
 | `cloud.js` | Login, database condiviso, tempo reale, gestione staff |
 | `config.js` | Collegamento al database (vuoto = modalità locale) |
 | `supabase/schema.sql` | Tabelle e regole di sicurezza da eseguire su Supabase |
