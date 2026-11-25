@@ -998,6 +998,7 @@ function renderImpostazioni(el) {
     <div class="card" style="margin-top:16px">
       <div class="card-head"><h3>📥 Google Calendar</h3><button class="btn sm primary" id="gcalImp">Importa prenotazioni</button></div>
       <p class="small muted" style="margin:0">Importa gli eventi del calendario Google che usavate per le prenotazioni (file .ics o .zip esportato da Google). Gli eventi già importati vengono riconosciuti e non si duplicano.</p>
+      ${CLOUD ? '' : '<p class="small" style="margin:8px 0 0">🔄 <b>Sincronizzazione automatica</b> (nuove prenotazioni e modifiche da Google ogni 5 minuti): disponibile dopo aver collegato il database condiviso — vedi README.</p>'}
     </div>
     ${CLOUD ? '<div class="grid cols-2" style="margin-top:16px" id="cloudCards"></div>' : ''}`;
   $('#gcalImp').onclick = () => openGcalImport();

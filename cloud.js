@@ -91,11 +91,12 @@ async function enterCloud(user) {
   setSync('ok');
   route();
   if (!rows.length) firstRun();
+  gcalCheck(true);
 }
 
 // uscita: niente dati in memoria, si torna alla schermata di accesso
 function signedOut() {
-  cloudReady = false; me = null;
+  cloudReady = false; me = null; gcal.appliedAt = null;
   if (channel) { sb.removeChannel(channel); channel = null; }
   synced.clear(); S = emptyState();
   if (!$('#modal').hidden) closeModal();
@@ -191,6 +192,7 @@ function subscribeRealtime() {
   if (channel) sb.removeChannel(channel);
   channel = sb.channel('agenda')
     .on('postgres_changes', { event: '*', schema: 'public', table: TABLE }, applyRemote)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gcal_feed' }, () => gcalCheck())
     .subscribe(status => {
       if (status === 'SUBSCRIBED') setSync('ok');
       else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setSync('off', 'Aggiornamenti in tempo reale non disponibili: ricarica la pagina');
@@ -298,6 +300,7 @@ async function renderCloudSettings(box) {
       <p>${esc(me?.email || '')} <span class="badge ${me?.ruolo === 'admin' ? 'primary' : ''}">${me?.ruolo === 'admin' ? 'Amministratore' : 'Staff'}</span></p>
       <div class="toolbar"><button class="btn" id="chgPw">Cambia password</button><button class="btn danger" id="logout">Esci</button></div>
     </div>
+    <div class="card" id="gcalCard"></div>
     <div class="card">
       <div class="card-head"><h3>👥 Staff autorizzato</h3></div>
       <div id="staffList" class="small muted">Caricamento…</div>
@@ -340,6 +343,93 @@ async function renderCloudSettings(box) {
     $('#stEmail').value = ''; $('#stNome').value = ''; loadStaff();
   });
   loadStaff();
+  renderGcalCard();
+}
+
+/* ---------- sincronizzazione Google Calendar ---------- */
+const gcal = { available: null, status: null, error: null, fetchedAt: null, checkedAt: null, hasUrl: false, appliedAt: null, last: null, busy: false };
+
+// legge lo stato del calendario scaricato dal database e, se è cambiato, aggiorna l'agenda
+async function gcalCheck(force = false) {
+  if (!cloudReady || gcal.busy) return;
+  gcal.busy = true;
+  try {
+    const { data, error } = await sb.from('gcal_feed').select('fetched_at, checked_at, status, error, has_url:ics_url').eq('id', 1).maybeSingle();
+    if (error || !data) { gcal.available = false; return; }
+    Object.assign(gcal, { available: true, status: data.status, error: data.error, fetchedAt: data.fetched_at, checkedAt: data.checked_at, hasUrl: !!data.has_url });
+    if (data.fetched_at && (force || data.fetched_at !== gcal.appliedAt)) {
+      const { data: feed, error: e2 } = await sb.from('gcal_feed').select('ics, fetched_at').eq('id', 1).single();
+      if (!e2 && feed.ics) {
+        const r = applyGcalFeed(feed.ics);
+        gcal.appliedAt = feed.fetched_at;
+        gcal.last = { ...r, at: new Date() };
+        if (r.created || r.updated || r.cancelled) {
+          save();
+          remoteRefresh();
+          toast(`📅 Google Calendar: ${[r.created && r.created + ' nuove', r.updated && r.updated + ' aggiornate', r.cancelled && r.cancelled + ' annullate'].filter(Boolean).join(', ')}`);
+        }
+      }
+    }
+  } catch (e) {
+    gcal.available = false; // tabella non ancora creata o errore temporaneo
+  } finally {
+    gcal.busy = false;
+    if ($('#gcalCard')) renderGcalCard();
+  }
+}
+// controllo di riserva ogni 5 minuti (se il tempo reale non arriva)
+setInterval(() => { if (CLOUD && cloudReady && !document.hidden) gcalCheck(); }, 5 * 60 * 1000);
+
+function renderGcalCard() {
+  const box = $('#gcalCard'); if (!box) return;
+  const t = d => d ? new Date(d).toLocaleString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+  const admin = me?.ruolo === 'admin';
+  let body;
+  if (gcal.available === false) {
+    body = `<p class="small">Per attivarla esegui lo script <b>supabase/google-sync.sql</b> nel SQL Editor di Supabase (vedi README), poi ricarica la pagina.</p>`;
+  } else if (gcal.available === null) {
+    body = '<p class="small muted">Verifica in corso…</p>';
+  } else {
+    body = `
+      <p class="small" style="margin:0 0 8px">${gcal.hasUrl
+        ? (gcal.status === 'errore' ? `<span class="badge danger">Errore</span> ${esc(gcal.error || '')}` : '<span class="badge ok">Attiva</span> il calendario viene controllato ogni 5 minuti.')
+        : '<span class="badge warn">Non configurata</span> manca l\'indirizzo del calendario.'}</p>
+      ${gcal.hasUrl ? `<div class="small muted">Ultimo controllo: ${t(gcal.checkedAt)} · ultima modifica su Google: ${t(gcal.fetchedAt)}</div>` : ''}
+      ${gcal.last ? `<div class="small muted">Ultimo aggiornamento dell'agenda: ${t(gcal.last.at)} — ${gcal.last.events} eventi letti, ${gcal.last.created} nuove, ${gcal.last.updated} aggiornate, ${gcal.last.cancelled} annullate</div>` : ''}
+      ${admin ? `
+        <label class="field" style="margin-top:10px">Indirizzo segreto in formato iCal ${gcal.hasUrl ? '(già impostato: incollane uno nuovo per cambiarlo)' : ''}
+          <input type="password" id="gcUrl" placeholder="https://calendar.google.com/calendar/ical/…/private-…/basic.ics" autocomplete="off"></label>
+        <p class="small muted">Google Calendar → ⚙️ Impostazioni → (a sinistra) il calendario delle prenotazioni → <i>Integra calendario</i> → <b>Indirizzo segreto in formato iCal</b>. Non condividerlo: chi lo ha può leggere il calendario.</p>` : ''}
+      <div class="toolbar" style="margin-top:8px">
+        ${admin ? '<button class="btn primary" id="gcSave">Salva indirizzo</button>' : ''}
+        ${admin && gcal.hasUrl ? '<button class="btn danger" id="gcOff">Disattiva</button>' : ''}
+        ${gcal.hasUrl ? '<button class="btn" id="gcNow">🔄 Sincronizza ora</button>' : ''}
+      </div>
+      <p class="small muted">Gli eventi nuovi (da ieri in poi) diventano prenotazioni; se un evento cambia su Google si aggiornano solo i dati che nessuno ha corretto a mano qui; se viene annullato o eliminato, la prenotazione passa ad “Annullata”.</p>`;
+  }
+  box.innerHTML = `<div class="card-head"><h3>📅 Sincronizzazione Google Calendar</h3></div>${body}`;
+  const syncNow = async () => {
+    const b = $('#gcNow'); if (b) { b.disabled = true; b.textContent = 'Sincronizzazione…'; }
+    const { data, error } = await sb.rpc('gcal_fetch');
+    if (error) toast('Errore: ' + error.message);
+    else if (data !== 'ok') toast('⚠️ ' + data);
+    await gcalCheck(true);
+    if (!error && data === 'ok') toast(gcal.last ? `Sincronizzato: ${gcal.last.created} nuove, ${gcal.last.updated} aggiornate, ${gcal.last.cancelled} annullate` : 'Sincronizzato');
+  };
+  $('#gcNow')?.addEventListener('click', syncNow);
+  $('#gcSave')?.addEventListener('click', async () => {
+    const url = $('#gcUrl').value.trim();
+    if (!/^https:\/\/calendar\.google\.com\/calendar\/ical\/.+\.ics$/i.test(url)) return toast('Incolla l\'indirizzo segreto in formato iCal (finisce con .ics)');
+    const { error } = await sb.from('gcal_feed').update({ ics_url: url }).eq('id', 1);
+    if (error) return toast('Errore: ' + error.message);
+    gcal.hasUrl = true; renderGcalCard(); toast('Indirizzo salvato'); syncNow();
+  });
+  $('#gcOff')?.addEventListener('click', async () => {
+    if (!confirm('Disattivare la sincronizzazione? Le prenotazioni già importate restano.')) return;
+    const { error } = await sb.from('gcal_feed').update({ ics_url: null, status: null, error: null }).eq('id', 1);
+    if (error) return toast('Errore: ' + error.message);
+    gcal.hasUrl = false; renderGcalCard();
+  });
 }
 
 boot();

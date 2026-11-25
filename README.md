@@ -51,6 +51,22 @@ Dal titolo e dalla descrizione di ogni evento l'app ricava: nome, coperti (*"Ros
 
 Limiti: degli eventi ricorrenti viene importata solo la prima data; gli eventi "tutto il giorno" ricevono l'orario di inizio dell'ultimo turno (modificabile).
 
+### Sincronizzazione automatica con Google Calendar
+
+Se continuate a segnare prenotazioni anche su Google Calendar, l'agenda può aggiornarsi da sola. Richiede il **database condiviso** (sezione sotto): una pagina web da sola non può leggere il calendario Google.
+
+1. In Supabase → **SQL Editor** esegui [`supabase/google-sync.sql`](supabase/google-sync.sql) (dopo `schema.sql`).
+2. In Google Calendar (da computer): **⚙️ Impostazioni** → a sinistra il calendario delle prenotazioni → **Integra calendario** → copia l'**Indirizzo segreto in formato iCal**.
+3. Nell'agenda, da amministratore: **Impostazioni → 📅 Sincronizzazione Google Calendar** → incolla l'indirizzo → **Salva indirizzo**.
+
+Da quel momento il database controlla il calendario **ogni 5 minuti** (anche quando nessuno ha l'agenda aperta) e ogni agenda aperta si aggiorna in tempo reale:
+
+- **evento nuovo** (da ieri in poi) → nuova prenotazione, interpretata come nell'importazione manuale;
+- **evento modificato** (orario, data, coperti, titolo…) → la prenotazione si aggiorna, **tranne i campi che lo staff ha corretto a mano nell'agenda**, che restano come li avete messi; menu, intolleranze, servizi e note aggiunti nell'agenda non vengono mai toccati;
+- **evento annullato o eliminato** su Google → la prenotazione futura passa ad *Annullata* con una nota.
+
+La sincronizzazione va **da Google verso l'agenda**: le prenotazioni create direttamente nell'agenda non vengono scritte su Google. Il pulsante **🔄 Sincronizza ora** forza un controllo immediato. L'indirizzo segreto dà accesso in lettura al calendario: non condividerlo; se finisce in mani sbagliate, in Google Calendar si può reimpostare (e poi va incollato di nuovo nell'agenda).
+
 ## Database condiviso e accesso riservato allo staff
 
 Con il database condiviso tutto lo staff vede la stessa agenda, da qualsiasi dispositivo, e le modifiche compaiono **in tempo reale** sugli altri schermi. Per entrare serve **email e password**, e possono entrare **solo le email autorizzate** dall'amministratore.
@@ -110,8 +126,9 @@ Consiglio: quando tutto lo staff ha creato l'account, in Supabase **Authenticati
 |---|---|
 | `index.html`, `styles.css` | Struttura e grafica |
 | `app.js` | Logica dell'agenda |
-| `gcal.js` | Importazione da Google Calendar (.ics / .zip) |
+| `gcal.js` | Importazione e sincronizzazione da Google Calendar |
 | `cloud.js` | Login, database condiviso, tempo reale, gestione staff |
 | `config.js` | Collegamento al database (vuoto = modalità locale) |
 | `supabase/schema.sql` | Tabelle e regole di sicurezza da eseguire su Supabase |
+| `supabase/google-sync.sql` | Sincronizzazione automatica con Google Calendar (facoltativa) |
 | `.github/workflows/pages.yml` | Pubblicazione automatica su GitHub Pages |

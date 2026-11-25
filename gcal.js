@@ -152,7 +152,8 @@ function interpretEvent(ev) {
 
   const ora = start.ora || '';
   return {
-    uid: ev.UID?.value || `${start.data}-${summary}`,
+    uid: gcalKey(ev) || `${start.data}-${summary}`,
+    hash: gcalHash(ev),
     ricorrente: !!ev.RRULE,
     allDay: start.allDay,
     summary, desc,
@@ -168,7 +169,7 @@ function interpretEvent(ev) {
       stato: cancellato ? 'annullata' : daConfermare ? 'richiesta' : 'confermata',
       intolleranze,
       note: ['Importato da Google Calendar: ' + summary, desc, loc && 'Luogo: ' + loc].filter(Boolean).join('\n'),
-      gcalUid: ev.UID?.value || '',
+      gcalUid: gcalKey(ev) || `${start.data}-${summary}`,
       coperti_incerti: !adulti,
     }),
   };
@@ -258,7 +259,8 @@ function openGcalImport() {
         p.tipoEvento = tipo;
         p.titolo = tipo ? (p.titolo || r.summary) : '';
         delete p.coperti_incerti;
-        p.id = uid();
+        p.id = S.prenotazioni.some(x => x.id === gcalId(r.uid)) ? uid() : gcalId(r.uid);
+        p.gcalUid = r.uid; p.gcalHash = r.hash; p.gcalSnap = gcalSnap(r.p);
         S.prenotazioni.push(p); n++;
       });
       closeModal(); rerender();
@@ -281,4 +283,81 @@ function openGcalImport() {
       $('#gcOut').innerHTML = `<div class="alert danger">Impossibile leggere il file: ${esc(err.message)}</div>`;
     }
   };
+}
+
+/* =========================================================
+   Sincronizzazione automatica (con database condiviso)
+   Il database scarica periodicamente il calendario Google (indirizzo segreto iCal);
+   qui il contenuto viene confrontato con l'agenda:
+   - eventi nuovi (da ieri in poi) → nuove prenotazioni
+   - eventi modificati → aggiornati solo i campi che nessuno ha corretto a mano nell'agenda
+   - eventi annullati o eliminati su Google → prenotazione "Annullata"
+   ========================================================= */
+const GCAL_FIELDS = ['nome', 'telefono', 'email', 'data', 'ora', 'turno', 'adulti', 'bambini', 'tavolo', 'tipo', 'tipoEvento', 'titolo'];
+
+function strHash(str, seed = 5381) {
+  let h = seed >>> 0;
+  for (let i = 0; i < str.length; i++) h = (Math.imul(h, 33) ^ str.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+function gcalKey(ev) {
+  const u = ev.UID?.value || '';
+  return u && ev['RECURRENCE-ID'] ? u + '#' + ev['RECURRENCE-ID'].value : u;
+}
+function gcalHash(ev) {
+  return strHash(['DTSTART', 'DTEND', 'SUMMARY', 'DESCRIPTION', 'LOCATION', 'STATUS'].map(k => ev[k]?.value || '').join('\u0001'));
+}
+// id stabile: due dispositivi che sincronizzano insieme creano la STESSA prenotazione, non due copie
+const gcalId = key => 'gc_' + strHash(key) + strHash(key, 7919);
+const gcalSnap = p => Object.fromEntries(GCAL_FIELDS.map(f => [f, p[f]]));
+
+function gcalMerge(ex, r) {
+  if (ex.gcalHash === r.hash) return false;
+  const prev = ex.gcalSnap || {};
+  let changed = false;
+  for (const f of GCAL_FIELDS) {
+    const userEdited = f in prev && ex[f] !== prev[f];
+    if (!userEdited && ex[f] !== r.p[f]) { ex[f] = r.p[f]; changed = true; }
+  }
+  if (r.p.stato === 'annullata' && ex.stato !== 'annullata') {
+    ex.stato = 'annullata'; changed = true;
+    ex.note = (ex.note ? ex.note + '\n' : '') + 'Annullata su Google Calendar il ' + new Date().toLocaleString('it-IT');
+  }
+  ex.gcalHash = r.hash;
+  ex.gcalSnap = gcalSnap(r.p);
+  return changed;
+}
+
+function applyGcalFeed(text, from = addDays(todayISO(), -1)) {
+  const items = parseICS(text).events.map(interpretEvent).filter(Boolean);
+  const res = { created: 0, updated: 0, cancelled: 0, events: items.length };
+  if (!items.length) return res; // feed vuoto o non valido: non tocchiamo nulla
+  const byKey = new Map(S.prenotazioni.filter(p => p.gcalUid).map(p => [p.gcalUid, p]));
+  const seen = new Set();
+  for (const r of items) {
+    if (seen.has(r.uid)) continue;
+    seen.add(r.uid);
+    const ex = byKey.get(r.uid) || S.prenotazioni.find(x => x.id === gcalId(r.uid));
+    if (ex) {
+      if (!ex.gcalUid) ex.gcalUid = r.uid;
+      if (gcalMerge(ex, r)) res.updated++;
+      continue;
+    }
+    if (r.p.data < from || r.p.stato === 'annullata') continue;
+    const p = { ...r.p, id: gcalId(r.uid), gcalUid: r.uid, gcalHash: r.hash, gcalSnap: gcalSnap(r.p) };
+    if (p.coperti_incerti) p.note = '⚠️ Coperti non indicati su Google Calendar: da verificare.\n' + p.note;
+    delete p.coperti_incerti;
+    S.prenotazioni.push(p);
+    res.created++;
+  }
+  // eventi spariti dal calendario Google (eliminati): annulla le prenotazioni future collegate
+  const t = todayISO();
+  for (const p of S.prenotazioni) {
+    if (p.gcalUid && !seen.has(p.gcalUid) && p.data >= t && isActive(p) && p.stato !== 'completata') {
+      p.stato = 'annullata';
+      p.note = (p.note ? p.note + '\n' : '') + 'Evento eliminato da Google Calendar il ' + new Date().toLocaleString('it-IT');
+      res.cancelled++;
+    }
+  }
+  return res;
 }
