@@ -7,6 +7,8 @@ Nessuna installazione: è una pagina statica (HTML + CSS + JavaScript). Funziona
 - **locale**: i dati restano nel browser del dispositivo (nessuna configurazione);
 - **condivisa**: i dati stanno in un database online con login riservato allo staff e aggiornamenti in tempo reale (vedi sotto).
 
+> **Nel repository c'è anche l'app [Turni Ufficio](turni/README.md)** (cartella `turni/`, pubblicata in `…/turni/`): generazione dei turni settimanali dell'ufficio.
+
 ## Avvio
 
 - Apri `index.html` nel browser, **oppure**

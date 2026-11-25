@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Turni Ufficio</title>
+  <meta name="description" content="Generazione e pubblicazione dei turni settimanali dell'ufficio.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar no-print">
+      <div class="brand">
+        <span class="brand-logo">🗓️</span>
+        <div>
+          <div class="brand-name" id="brandName">Turni Ufficio</div>
+          <div class="brand-sub">Orario settimanale</div>
+        </div>
+      </div>
+      <nav class="nav" id="nav"></nav>
+      <div class="me" id="meBox"></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar no-print">
+        <h1 id="viewTitle"></h1>
+        <span id="syncState" class="badge" hidden></span>
+      </header>
+      <section id="view" class="view"></section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h2 id="modalTitle"></h2>
+        <button class="icon-btn" data-act="modal-close" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+  <div class="auth" id="auth" hidden></div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script src="cloud.js"></script>
+</body>
+</html>
