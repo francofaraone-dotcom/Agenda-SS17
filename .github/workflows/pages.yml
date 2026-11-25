@@ -27,6 +27,8 @@ jobs:
           cp index.html styles.css app.js cloud.js config.js _site/
           mkdir _site/turni
           cp turni/index.html turni/styles.css turni/app.js turni/cloud.js turni/config.js _site/turni/
+          mkdir _site/turnivr
+          cp turnivr/index.html turnivr/styles.css turnivr/app.js turnivr/cloud.js turnivr/config.js _site/turnivr/
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
